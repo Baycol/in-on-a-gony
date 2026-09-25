@@ -8,6 +8,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- QRCode.js para generar el QR -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Firebase App y Realtime Database SDK (Versión liviana modular CDN) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -22,31 +25,31 @@
     <div id="login-screen" class="bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
         <div class="inline-block bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full text-xs font-black mb-3 tracking-wider uppercase">In-On-A-Gony Live</div>
         <h1 class="text-3xl font-black text-indigo-600 mb-1">¡A Jugar!</h1>
-        <p class="text-gray-500 mb-6 text-sm">Ingresa tu nombre o apodo para entrar al salón</p>
+        <p class="text-gray-500 mb-6 text-sm">Ingresa tu apodo para unirte a la sala del salón</p>
         
         <div class="space-y-4 text-left">
             <input type="text" id="username" placeholder="Ej. Juanito_Pro" class="w-full px-4 py-3.5 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 text-lg transition font-medium">
             <button onclick="joinRoom()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg shadow-indigo-200">¡Unirme a la Sala! 🚀</button>
         </div>
 
-        <!-- QR para que proyectes o pongas en tus diapositivas -->
+        <!-- QR para tus diapositivas -->
         <div class="mt-8 border-t pt-6">
             <p class="text-xs text-gray-400 mb-3 font-bold uppercase tracking-wider">Escanea para entrar desde tu cel:</p>
             <div id="qrcode" class="flex justify-center p-3 bg-gray-50 rounded-2xl border border-gray-100 inline-block shadow-inner"></div>
         </div>
     </div>
 
-    <!-- VISTA 2: SALA DE ESPERA (Lobby de la presentación) -->
+    <!-- VISTA 2: SALA DE ESPERA (Control del Host / Presentador) -->
     <div id="lobby-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-lg w-full text-center animate-fade-in">
-        <span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Sala de Espera del Salón</span>
+        <span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Sala Global del Salón</span>
         <h2 class="text-3xl font-black text-indigo-600 mt-3 mb-1">¡Esperando competidores!</h2>
-        <p class="text-gray-500 text-sm mb-6">El profesor iniciará cuando todos estén listos.</p>
+        <p class="text-gray-500 text-sm mb-6">Tus compañeros están escaneando el QR...</p>
 
         <div id="players-list" class="flex flex-wrap gap-2 justify-center mb-8 max-h-48 overflow-y-auto p-3 bg-gray-50 rounded-2xl border border-gray-100">
-            <!-- Jugadores conectados -->
+            <!-- Jugadores sincronizados en tiempo real -->
         </div>
 
-        <button onclick="startQuiz()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg shadow-emerald-100">¡Empezar el Quiz Ya! 🔥</button>
+        <button onclick="hostStartQuiz()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg shadow-emerald-100">¡Empezar el Quiz Ya! 🔥</button>
     </div>
 
     <!-- VISTA 3: PREGUNTA ACTIVA -->
@@ -68,20 +71,18 @@
 
     <!-- VISTA 4: TABLA DE PUNTUACIÓN ESTILO KAHOOT (Entre preguntas) -->
     <div id="leaderboard-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
-        <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Marcador Parcial</span>
+        <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Marcador en Vivo</span>
         <h2 class="text-3xl font-black text-indigo-600 mt-2 mb-6">🏆 Tabla de Posiciones</h2>
         
-        <div id="podium-list" class="space-y-3 mb-6 text-left max-h-60 overflow-y-auto p-2">
-            <!-- Puestos inyectados dinámicamente -->
-        </div>
+        <div id="podium-list" class="space-y-3 mb-6 text-left max-h-60 overflow-y-auto p-2"></div>
 
-        <button onclick="nextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Siguiente Pregunta ➡️</button>
+        <button onclick="hostNextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Siguiente Pregunta ➡️</button>
     </div>
 
     <!-- VISTA 5: PODIO FINAL -->
     <div id="result-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
         <div class="text-6xl mb-2">👑</div>
-        <h2 class="text-3xl font-black text-indigo-600 mb-1">¡Se acabó la tortura!</h2>
+        <h2 class="text-3xl font-black text-indigo-600 mb-1">¡Fin del suplicio!</h2>
         <p class="text-gray-500 mb-4">Resultado final para <span id="final-name" class="font-bold text-gray-800"></span></p>
         
         <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 my-6">
@@ -93,7 +94,14 @@
     </div>
 
     <script>
-        // 15 Preguntas balanceadas: desde muy fáciles hasta un poquito trampa (nivel salón amigable)
+        // CONFIGURACIÓN DE FIREBASE (Ya con tu URL integrada)
+        const firebaseConfig = {
+            databaseURL: "https://in-on-a-gony-default-rtdb.firebaseio.com/" 
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 15 Preguntas balanceadas sobre Preposiciones
         const questions = [
             { q: "She was born ___ July 12th.", options: ["at", "in", "on", "by"], correct: 2 },
             { q: "The cat is sleeping ___ the table.", options: ["on", "in", "at", "under"], correct: 3 },
@@ -112,15 +120,12 @@
             { q: "She put her bag ___ the desk.", options: ["on", "in", "at", "under"], correct: 0 }
         ];
 
-        let currentQuestion = 0;
-        let score = 0;
         let playerName = "";
+        let score = 0;
         let timer;
         let timeLeft = 8;
         let isAnswered = false;
-        
-        // Simulación de puntajes del salón para la tabla estilo Kahoot
-        let leaderboardData = [];
+        let currentQIndex = 0;
 
         window.onload = function() {
             const qrContainer = document.getElementById("qrcode");
@@ -133,58 +138,84 @@
                 colorLight: "#ffffff",
                 correctLevel: QRCode.CorrectLevel.M
             });
+
+            // Escuchar cambios globales de estado en Firebase
+            db.ref("gameState").on("value", (snapshot) => {
+                const state = snapshot.val();
+                if (!state) return;
+
+                if (state.status === "playing") {
+                    currentQIndex = state.questionIndex;
+                    triggerLoadQuestion(currentQIndex);
+                } else if (state.status === "leaderboard") {
+                    showLeaderboardScreen(state.scores);
+                }
+            });
+
+            // Escuchar lista de jugadores en tiempo real
+            db.ref("players").on("value", (snapshot) => {
+                const players = snapshot.val() || {};
+                const container = document.getElementById("players-list");
+                container.innerHTML = "";
+                Object.values(players).forEach(p => {
+                    const badge = document.createElement("div");
+                    badge.className = `px-3.5 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 ${p.name === playerName ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`;
+                    badge.innerHTML = `<span>👤</span> ${p.name} ${p.name === playerName ? '(Tú)' : ''}`;
+                    container.appendChild(badge);
+                });
+            });
         };
 
         function joinRoom() {
             const input = document.getElementById("username").value.trim();
             if(!input) {
-                alert("¡Pon tu apodo para que sepan quién va ganando!");
+                alert("¡Pon tu apodo para entrar a la sala!");
                 return;
             }
             playerName = input;
-            
-            // Añadir a la lista general
-            leaderboardData.push({ name: playerName, score: 0 });
+
+            // Registrar jugador en Firebase con ID único
+            const playerRef = db.ref("players").push();
+            playerRef.set({ name: playerName, score: 0 });
 
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("lobby-screen").classList.remove("hidden");
-            updateLobbyList();
         }
 
-        function updateLobbyList() {
-            const container = document.getElementById("players-list");
-            container.innerHTML = "";
-            leaderboardData.forEach(p => {
-                const badge = document.createElement("div");
-                badge.className = `px-3.5 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 ${p.name === playerName ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`;
-                badge.innerHTML = `<span>👤</span> ${p.name} ${p.name === playerName ? '(Tú)' : ''}`;
-                container.appendChild(badge);
-            });
+        function hostStartQuiz() {
+            db.ref("gameState").set({ status: "playing", questionIndex: 0 });
         }
 
-        function startQuiz() {
-            document.getElementById("lobby-screen").classList.add("hidden");
-            document.getElementById("game-screen").classList.remove("hidden");
-            document.getElementById("player-tag").innerText = `👤 ${playerName}`;
-            loadQuestion();
-        }
-
-        function loadQuestion() {
-            if(currentQuestion >= questions.length) {
-                endGame();
-                return;
+        function hostNextQuestion() {
+            const nextIdx = currentQIndex + 1;
+            if (nextIdx >= questions.length) {
+                document.getElementById("leaderboard-screen").classList.add("hidden");
+                document.getElementById("result-screen").classList.remove("hidden");
+                document.getElementById("final-name").innerText = playerName;
+                document.getElementById("final-score").innerText = `${score} pts`;
+            } else {
+                db.ref("gameState").set({ status: "playing", questionIndex: nextIdx });
             }
+        }
 
+        function triggerLoadQuestion(index) {
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("lobby-screen").classList.add("hidden");
+            document.getElementById("leaderboard-screen").classList.add("hidden");
+            document.getElementById("result-screen").classList.add("hidden");
+            document.getElementById("game-screen").classList.remove("hidden");
+
+            document.getElementById("player-tag").innerText = `👤 ${playerName}`;
             isAnswered = false;
             clearInterval(timer);
             timeLeft = 8;
             document.getElementById("timer").innerText = `⏱️ ${timeLeft}s`;
             document.getElementById("feedback-msg").classList.add("hidden");
-            
+
             startTimer();
 
-            const qData = questions[currentQuestion];
-            document.getElementById("question-number").innerText = `Pregunta ${currentQuestion + 1} de ${questions.length}`;
+            const qData = questions[index];
+            document.getElementById("question-number").innerText = `Pregunta ${index + 1} de ${questions.length}`;
             document.getElementById("question-text").innerText = qData.q;
 
             const container = document.getElementById("options-container");
@@ -197,11 +228,11 @@
                 "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200"
             ];
 
-            qData.options.forEach((opt, index) => {
+            qData.options.forEach((opt, idx) => {
                 const btn = document.createElement("button");
-                btn.className = `${colors[index]} text-white font-black p-6 rounded-2xl text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center`;
+                btn.className = `${colors[idx]} text-white font-black p-6 rounded-2xl text-xl shadow-lg transition transform active:scale-95 flex items-center justify-center`;
                 btn.innerText = opt;
-                btn.onclick = () => selectAnswer(index, btn);
+                btn.onclick = () => selectAnswer(idx, btn);
                 container.appendChild(btn);
             });
         }
@@ -220,10 +251,8 @@
         function handleTimeOut() {
             if(isAnswered) return;
             isAnswered = true;
-            showFeedbackState(false, "⏰ ¡Se acabó el tiempo!");
-            
-            // Esperar 2 segundos y mostrar la tabla de posiciones estilo Kahoot
-            setTimeout(showLeaderboard, 2000);
+            showFeedbackState("⏰ ¡Se acabó el tiempo!");
+            setTimeout(pushScoreAndShowLeaderboard, 2000);
         }
 
         function selectAnswer(selectedIndex, btnElement) {
@@ -231,19 +260,14 @@
             isAnswered = true;
             clearInterval(timer);
 
-            const qData = questions[currentQuestion];
+            const qData = questions[currentQIndex];
             const feedback = document.getElementById("feedback-msg");
             feedback.classList.remove("hidden");
 
             if(selectedIndex === qData.correct) {
                 score += (timeLeft * 15) + 100;
                 document.getElementById("score-tag").innerText = `Puntos: ${score}`;
-                
-                // Actualizar marcador del usuario actual en la tabla global
-                let userObj = leaderboardData.find(p => p.name === playerName);
-                if(userObj) userObj.score = score;
-
-                feedback.innerText = "🎉 ¡Correcto! ¡Bien hecho!";
+                feedback.innerText = "🎉 ¡Correcto!";
                 feedback.className = "mt-4 text-center font-bold text-lg text-emerald-600 animate-fade-in";
                 btnElement.classList.add("ring-4", "ring-white", "scale-105");
             } else {
@@ -257,53 +281,50 @@
                 }
             }
 
-            // Pausa de 2 segundos antes de mostrar el marcador estilo Kahoot
-            setTimeout(showLeaderboard, 2000);
+            setTimeout(pushScoreAndShowLeaderboard, 2000);
         }
 
-        function showFeedbackState(isCorrect, text) {
+        function showFeedbackState(text) {
             const feedback = document.getElementById("feedback-msg");
             feedback.classList.remove("hidden");
             feedback.innerText = text;
             feedback.className = "mt-4 text-center font-bold text-lg text-amber-600 animate-fade-in";
             
-            const correctIndex = questions[currentQuestion].correct;
+            const correctIndex = questions[currentQIndex].correct;
             const buttons = document.getElementById("options-container").children;
             if(buttons[correctIndex]) {
                 buttons[correctIndex].classList.add("ring-4", "ring-white", "scale-105");
             }
         }
 
-        function showLeaderboard() {
+        function pushScoreAndShowLeaderboard() {
+            db.ref("scores/" + playerName).set(score);
+
+            db.ref("scores").once("value", (snapshot) => {
+                const scoresObj = snapshot.val() || {};
+                db.ref("gameState").set({ status: "leaderboard", scores: scoresObj });
+            });
+        }
+
+        function showLeaderboardScreen(scoresObj) {
             document.getElementById("game-screen").classList.add("hidden");
             document.getElementById("leaderboard-screen").classList.remove("hidden");
 
-            // Ordenar de mayor a menor puntaje
-            leaderboardData.sort((a, b) => b.score - a.score);
+            let ranking = [];
+            for (let name in scoresObj) {
+                ranking.push({ name: name, score: scoresObj[name] });
+            }
+            ranking.sort((a, b) => b.score - a.score);
 
             const container = document.getElementById("podium-list");
             container.innerHTML = "";
 
-            leaderboardData.forEach((p, index) => {
+            ranking.forEach((p, index) => {
                 const row = document.createElement("div");
                 row.className = `flex justify-between items-center p-3 rounded-xl font-bold ${index === 0 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-gray-100 text-gray-700'}`;
                 row.innerHTML = `<span>#${index + 1} ${p.name} ${index === 0 ? '👑' : ''}</span> <span class="font-black text-indigo-600">${p.score} pts</span>`;
                 container.appendChild(row);
             });
-        }
-
-        function nextQuestion() {
-            currentQuestion++;
-            document.getElementById("leaderboard-screen").classList.add("hidden");
-            document.getElementById("game-screen").classList.remove("hidden");
-            loadQuestion();
-        }
-
-        function endGame() {
-            document.getElementById("game-screen").classList.add("hidden");
-            document.getElementById("result-screen").classList.remove("hidden");
-            document.getElementById("final-name").innerText = playerName;
-            document.getElementById("final-score").innerText = `${score} pts`;
         }
     </script>
 </body>
