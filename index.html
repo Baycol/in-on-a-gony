@@ -38,7 +38,7 @@
         </div>
     </div>
 
-    <!-- VISTA 2: SALA DE ESPERA (Con botón de expulsar) -->
+    <!-- VISTA 2: SALA DE ESPERA -->
     <div id="lobby-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-lg w-full text-center animate-fade-in">
         <span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Sala Global del Salón</span>
         <h2 class="text-3xl font-black text-indigo-600 mt-3 mb-1">¡Esperando competidores!</h2>
@@ -107,13 +107,14 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let myPlayerKey = ""; // Identificador único de este cliente en Firebase
+        let myPlayerKey = ""; 
         let playerName = "";
         let score = 0;
         let timer;
         let timeLeft = 8;
         let isAnswered = false;
         let currentQIndex = 0;
+        let hasJoinedGame = false; // Bandera para saber si ya pasó del login/lobby al juego activo
 
         const questions = [
             { q: "She was born ___ July 12th.", options: ["at", "in", "on", "by"], correct: 2 },
@@ -151,10 +152,14 @@
                 if (!state) return;
 
                 if (state.status === "playing") {
+                    hasJoinedGame = true; // Ya arrancó el juego para este cliente
                     currentQIndex = state.questionIndex;
                     triggerLoadQuestion(currentQIndex);
                 } else if (state.status === "leaderboard") {
-                    showLeaderboardScreen(state.scores);
+                    // SOLO mostrar el marcador si el usuario ya está jugando activamente
+                    if (hasJoinedGame) {
+                        showLeaderboardScreen(state.scores);
+                    }
                 }
             });
 
@@ -164,7 +169,6 @@
                 const container = document.getElementById("players-list");
                 container.innerHTML = "";
 
-                // Si ya te habías unido pero ya no estás en la lista, significa que te expulsaron
                 if (myPlayerKey && playerName && !players[myPlayerKey]) {
                     showKickedScreen();
                     return;
@@ -201,7 +205,6 @@
         }
 
         function kickPlayer(key) {
-            // Elimina al jugador de la base de datos de Firebase
             db.ref("players/" + key).remove();
             db.ref("scores/" + key).remove();
         }
@@ -222,6 +225,7 @@
         function hostNextQuestion() {
             const nextIdx = currentQIndex + 1;
             if (nextIdx >= questions.length) {
+                db.ref("gameState").set({ status: "finished" }); // Estado opcional para finalizar
                 document.getElementById("leaderboard-screen").classList.add("hidden");
                 document.getElementById("result-screen").classList.remove("hidden");
                 document.getElementById("final-name").innerText = playerName;
@@ -345,7 +349,6 @@
             document.getElementById("leaderboard-screen").classList.remove("hidden");
 
             let ranking = [];
-            // Mapear claves de puntajes con los nombres reales de los jugadores activos
             db.ref("players").once("value", (snap) => {
                 const activePlayers = snap.val() || {};
                 for (let key in scoresObj) {
