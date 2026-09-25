@@ -75,7 +75,13 @@
         
         <div id="podium-list" class="space-y-3 mb-6 text-left max-h-60 overflow-y-auto p-2"></div>
 
-        <button onclick="hostNextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Siguiente Pregunta ➡️</button>
+        <!-- Solo el Anfitrión verá este botón habilitado -->
+        <div id="host-controls">
+            <button onclick="hostNextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Siguiente Pregunta ➡️</button>
+        </div>
+        <div id="guest-waiting" class="hidden text-gray-400 font-bold text-sm py-2">
+            ⏳ Esperando a que el anfitrión avance...
+        </div>
     </div>
 
     <!-- VISTA 5: PODIO FINAL -->
@@ -115,6 +121,7 @@
         let isAnswered = false;
         let currentQIndex = 0;
         let hasJoinedGame = false; 
+        let isHost = false; // Identifica si este dispositivo es el anfitrión principal
 
         const questions = [
             { q: "She was born ___ July 12th.", options: ["at", "in", "on", "by"], correct: 2 },
@@ -134,7 +141,17 @@
             { q: "She put her bag ___ the desk.", options: ["on", "in", "at", "under"], correct: 0 }
         ];
 
-        // Función centralizada para mostrar una pantalla y ocultar todas las demás automáticamente
+        // Definir al Anfitrión globalmente de forma segura en Firebase
+        db.ref("hostKey").transaction((currentHost) => {
+            if (!currentHost) {
+                // Si no hay host registrado, este cliente se convierte en el anfitrión
+                const uniqueId = 'host_' + Math.random().toString(36).substring(2, 9);
+                isHost = true;
+                return uniqueId;
+            }
+            return currentHost;
+        });
+
         function showScreen(screenId) {
             const screens = document.querySelectorAll('.app-screen');
             screens.forEach(screen => {
@@ -165,14 +182,13 @@
                     currentQIndex = state.questionIndex;
                     triggerLoadQuestion(currentQIndex);
                 } else if (state.status === "leaderboard") {
-                    // Solo muestra la tabla de posiciones si este cliente ya entró al juego activo
                     if (hasJoinedGame) {
                         showLeaderboardScreen(state.scores);
                     }
                 }
             });
 
-            // Escuchar jugadores en tiempo real y verificar si fuiste expulsado
+            // Escuchar jugadores en tiempo real y verificar expulsiones
             db.ref("players").on("value", (snapshot) => {
                 const players = snapshot.val() || {};
                 const container = document.getElementById("players-list");
@@ -222,6 +238,9 @@
         }
 
         function hostNextQuestion() {
+            // Solo permitir avanzar si es el anfitrión real
+            if (!isHost) return;
+
             const nextIdx = currentQIndex + 1;
             if (nextIdx >= questions.length) {
                 db.ref("gameState").set({ status: "finished" });
@@ -242,6 +261,13 @@
             timeLeft = 8;
             document.getElementById("timer").innerText = `⏱️ ${timeLeft}s`;
             document.getElementById("feedback-msg").classList.add("hidden");
+
+            // Limpiar estilos anteriores de botones
+            const buttons = document.getElementById("options-container").children;
+            for(let btn of buttons) {
+                btn.disabled = false;
+                btn.className = btn.className.replace(/opacity-50|ring-4|ring-white|scale-105|scale-95/g, '');
+            }
 
             startTimer();
 
@@ -280,9 +306,13 @@
         }
 
         function handleTimeOut() {
-            if(isAnswered) return;
-            isAnswered = true;
-            showFeedbackState("⏰ ¡Se acabó el tiempo!");
+            if(!isAnswered) {
+                isAnswered = true;
+                showFeedbackState("⏰ ¡Se acabó el tiempo!");
+            }
+            // Bloquear botones para que no sigan picándole
+            disableAllButtons();
+            // Esperar 2 segundos viendo la respuesta correcta antes de pasar al marcador global sincronizado
             setTimeout(pushScoreAndShowLeaderboard, 2000);
         }
 
@@ -312,7 +342,15 @@
                 }
             }
 
+            disableAllButtons();
             setTimeout(pushScoreAndShowLeaderboard, 2000);
+        }
+
+        function disableAllButtons() {
+            const buttons = document.getElementById("options-container").children;
+            for(let btn of buttons) {
+                btn.disabled = true;
+            }
         }
 
         function showFeedbackState(text) {
@@ -329,16 +367,30 @@
         }
 
         function pushScoreAndShowLeaderboard() {
-            db.ref("scores/" + myPlayerKey).set(score);
+            if (myPlayerKey) {
+                db.ref("scores/" + myPlayerKey).set(score);
+            }
 
-            db.ref("scores").once("value", (snapshot) => {
-                const scoresObj = snapshot.val() || {};
-                db.ref("gameState").set({ status: "leaderboard", scores: scoresObj });
-            });
+            // Solo el anfitrión actualiza el estado global de la sala a "leaderboard" para que todos lo vean al mismo tiempo
+            if (isHost) {
+                db.ref("scores").once("value", (snapshot) => {
+                    const scoresObj = snapshot.val() || {};
+                    db.ref("gameState").set({ status: "leaderboard", scores: scoresObj });
+                });
+            }
         }
 
         function showLeaderboardScreen(scoresObj) {
             showScreen('leaderboard-screen');
+
+            // Mostrar u ocultar controles dependiendo de si este dispositivo es el anfitrión
+            if (isHost) {
+                document.getElementById("host-controls").classList.remove("hidden");
+                document.getElementById("guest-waiting").classList.add("hidden");
+            } else {
+                document.getElementById("host-controls").classList.add("hidden");
+                document.getElementById("guest-waiting").classList.remove("hidden");
+            }
 
             let ranking = [];
             db.ref("players").once("value", (snap) => {
