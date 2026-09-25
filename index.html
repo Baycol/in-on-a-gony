@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- QRCode.js para generar el QR -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- Firebase App y Realtime Database SDK (Versión liviana modular CDN) -->
+    <!-- Firebase App y Realtime Database SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
@@ -21,7 +21,7 @@
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-indigo-950 to-purple-950 text-white font-sans min-h-screen flex flex-col items-center justify-center p-4">
 
-    <!-- VISTA 1: REGISTRO DE USUARIO (Móvil del compañero) -->
+    <!-- VISTA 1: REGISTRO DE USUARIO -->
     <div id="login-screen" class="bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
         <div class="inline-block bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full text-xs font-black mb-3 tracking-wider uppercase">In-On-A-Gony Live</div>
         <h1 class="text-3xl font-black text-indigo-600 mb-1">¡A Jugar!</h1>
@@ -32,21 +32,20 @@
             <button onclick="joinRoom()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg shadow-indigo-200">¡Unirme a la Sala! 🚀</button>
         </div>
 
-        <!-- QR para tus diapositivas -->
         <div class="mt-8 border-t pt-6">
             <p class="text-xs text-gray-400 mb-3 font-bold uppercase tracking-wider">Escanea para entrar desde tu cel:</p>
             <div id="qrcode" class="flex justify-center p-3 bg-gray-50 rounded-2xl border border-gray-100 inline-block shadow-inner"></div>
         </div>
     </div>
 
-    <!-- VISTA 2: SALA DE ESPERA (Control del Host / Presentador) -->
+    <!-- VISTA 2: SALA DE ESPERA (Con botón de expulsar) -->
     <div id="lobby-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-lg w-full text-center animate-fade-in">
         <span class="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Sala Global del Salón</span>
         <h2 class="text-3xl font-black text-indigo-600 mt-3 mb-1">¡Esperando competidores!</h2>
-        <p class="text-gray-500 text-sm mb-6">Tus compañeros están escaneando el QR...</p>
+        <p class="text-gray-500 text-sm mb-6">Puedes expulsar usuarios molestos con la "❌"</p>
 
-        <div id="players-list" class="flex flex-wrap gap-2 justify-center mb-8 max-h-48 overflow-y-auto p-3 bg-gray-50 rounded-2xl border border-gray-100">
-            <!-- Jugadores sincronizados en tiempo real -->
+        <div id="players-list" class="flex flex-col gap-2 mb-8 max-h-48 overflow-y-auto p-3 bg-gray-50 rounded-2xl border border-gray-100 text-left">
+            <!-- Jugadores sincronizados con opción de expulsar -->
         </div>
 
         <button onclick="hostStartQuiz()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg shadow-emerald-100">¡Empezar el Quiz Ya! 🔥</button>
@@ -69,7 +68,7 @@
         <div id="feedback-msg" class="mt-4 text-center font-bold text-lg hidden animate-fade-in"></div>
     </div>
 
-    <!-- VISTA 4: TABLA DE PUNTUACIÓN ESTILO KAHOOT (Entre preguntas) -->
+    <!-- VISTA 4: TABLA DE PUNTUACIÓN -->
     <div id="leaderboard-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
         <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">Marcador en Vivo</span>
         <h2 class="text-3xl font-black text-indigo-600 mt-2 mb-6">🏆 Tabla de Posiciones</h2>
@@ -93,15 +92,29 @@
         <button onclick="location.reload()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Jugar de Nuevo 🔄</button>
     </div>
 
+    <!-- VISTA EXPULSADO -->
+    <div id="kicked-screen" class="hidden bg-white text-gray-800 p-8 rounded-3xl shadow-2xl max-w-md w-full text-center animate-fade-in">
+        <div class="text-6xl mb-2">🚷</div>
+        <h2 class="text-3xl font-black text-rose-600 mb-1">¡Fuera de la sala!</h2>
+        <p class="text-gray-500 mb-6">El presentador te ha expulsado del juego.</p>
+        <button onclick="location.reload()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-black py-4 rounded-2xl transition transform active:scale-95 text-lg shadow-lg">Entrar con otro apodo</button>
+    </div>
+
     <script>
-        // CONFIGURACIÓN DE FIREBASE (Ya con tu URL integrada)
         const firebaseConfig = {
             databaseURL: "https://in-on-a-gony-default-rtdb.firebaseio.com/" 
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // 15 Preguntas balanceadas sobre Preposiciones
+        let myPlayerKey = ""; // Identificador único de este cliente en Firebase
+        let playerName = "";
+        let score = 0;
+        let timer;
+        let timeLeft = 8;
+        let isAnswered = false;
+        let currentQIndex = 0;
+
         const questions = [
             { q: "She was born ___ July 12th.", options: ["at", "in", "on", "by"], correct: 2 },
             { q: "The cat is sleeping ___ the table.", options: ["on", "in", "at", "under"], correct: 3 },
@@ -120,13 +133,6 @@
             { q: "She put her bag ___ the desk.", options: ["on", "in", "at", "under"], correct: 0 }
         ];
 
-        let playerName = "";
-        let score = 0;
-        let timer;
-        let timeLeft = 8;
-        let isAnswered = false;
-        let currentQIndex = 0;
-
         window.onload = function() {
             const qrContainer = document.getElementById("qrcode");
             qrContainer.innerHTML = "";
@@ -139,7 +145,7 @@
                 correctLevel: QRCode.CorrectLevel.M
             });
 
-            // Escuchar cambios globales de estado en Firebase
+            // Escuchar estado global
             db.ref("gameState").on("value", (snapshot) => {
                 const state = snapshot.val();
                 if (!state) return;
@@ -152,16 +158,28 @@
                 }
             });
 
-            // Escuchar lista de jugadores en tiempo real
+            // Escuchar jugadores en tiempo real y verificar si fuiste expulsado
             db.ref("players").on("value", (snapshot) => {
                 const players = snapshot.val() || {};
                 const container = document.getElementById("players-list");
                 container.innerHTML = "";
-                Object.values(players).forEach(p => {
-                    const badge = document.createElement("div");
-                    badge.className = `px-3.5 py-2 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 ${p.name === playerName ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`;
-                    badge.innerHTML = `<span>👤</span> ${p.name} ${p.name === playerName ? '(Tú)' : ''}`;
-                    container.appendChild(badge);
+
+                // Si ya te habías unido pero ya no estás en la lista, significa que te expulsaron
+                if (myPlayerKey && playerName && !players[myPlayerKey]) {
+                    showKickedScreen();
+                    return;
+                }
+
+                Object.keys(players).forEach(key => {
+                    const p = players[key];
+                    const row = document.createElement("div");
+                    row.className = `flex justify-between items-center p-3 rounded-xl font-bold text-sm ${p.name === playerName ? 'bg-indigo-50 text-indigo-900 border border-indigo-200' : 'bg-gray-100 text-gray-700'}`;
+                    
+                    row.innerHTML = `
+                        <span class="flex items-center gap-2">👤 ${p.name} ${p.name === playerName ? '(Tú)' : ''}</span>
+                        <button onclick="kickPlayer('${key}')" class="bg-rose-100 hover:bg-rose-500 hover:text-white text-rose-600 px-3 py-1.5 rounded-lg text-xs font-black transition">❌ Expulsar</button>
+                    `;
+                    container.appendChild(row);
                 });
             });
         };
@@ -174,12 +192,27 @@
             }
             playerName = input;
 
-            // Registrar jugador en Firebase con ID único
             const playerRef = db.ref("players").push();
+            myPlayerKey = playerRef.key;
             playerRef.set({ name: playerName, score: 0 });
 
             document.getElementById("login-screen").classList.add("hidden");
             document.getElementById("lobby-screen").classList.remove("hidden");
+        }
+
+        function kickPlayer(key) {
+            // Elimina al jugador de la base de datos de Firebase
+            db.ref("players/" + key).remove();
+            db.ref("scores/" + key).remove();
+        }
+
+        function showKickedScreen() {
+            document.getElementById("login-screen").classList.add("hidden");
+            document.getElementById("lobby-screen").classList.add("hidden");
+            document.getElementById("game-screen").classList.add("hidden");
+            document.getElementById("leaderboard-screen").classList.add("hidden");
+            document.getElementById("result-screen").classList.add("hidden");
+            document.getElementById("kicked-screen").classList.remove("hidden");
         }
 
         function hostStartQuiz() {
@@ -203,6 +236,7 @@
             document.getElementById("lobby-screen").classList.add("hidden");
             document.getElementById("leaderboard-screen").classList.add("hidden");
             document.getElementById("result-screen").classList.add("hidden");
+            document.getElementById("kicked-screen").classList.add("hidden");
             document.getElementById("game-screen").classList.remove("hidden");
 
             document.getElementById("player-tag").innerText = `👤 ${playerName}`;
@@ -298,7 +332,7 @@
         }
 
         function pushScoreAndShowLeaderboard() {
-            db.ref("scores/" + playerName).set(score);
+            db.ref("scores/" + myPlayerKey).set(score);
 
             db.ref("scores").once("value", (snapshot) => {
                 const scoresObj = snapshot.val() || {};
@@ -311,19 +345,25 @@
             document.getElementById("leaderboard-screen").classList.remove("hidden");
 
             let ranking = [];
-            for (let name in scoresObj) {
-                ranking.push({ name: name, score: scoresObj[name] });
-            }
-            ranking.sort((a, b) => b.score - a.score);
+            // Mapear claves de puntajes con los nombres reales de los jugadores activos
+            db.ref("players").once("value", (snap) => {
+                const activePlayers = snap.val() || {};
+                for (let key in scoresObj) {
+                    if (activePlayers[key]) {
+                        ranking.push({ name: activePlayers[key].name, score: scoresObj[key] });
+                    }
+                }
+                ranking.sort((a, b) => b.score - a.score);
 
-            const container = document.getElementById("podium-list");
-            container.innerHTML = "";
+                const container = document.getElementById("podium-list");
+                container.innerHTML = "";
 
-            ranking.forEach((p, index) => {
-                const row = document.createElement("div");
-                row.className = `flex justify-between items-center p-3 rounded-xl font-bold ${index === 0 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-gray-100 text-gray-700'}`;
-                row.innerHTML = `<span>#${index + 1} ${p.name} ${index === 0 ? '👑' : ''}</span> <span class="font-black text-indigo-600">${p.score} pts</span>`;
-                container.appendChild(row);
+                ranking.forEach((p, index) => {
+                    const row = document.createElement("div");
+                    row.className = `flex justify-between items-center p-3 rounded-xl font-bold ${index === 0 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-gray-100 text-gray-700'}`;
+                    row.innerHTML = `<span>#${index + 1} ${p.name} ${index === 0 ? '👑' : ''}</span> <span class="font-black text-indigo-600">${p.score} pts</span>`;
+                    container.appendChild(row);
+                });
             });
         }
     </script>
